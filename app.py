@@ -1,236 +1,186 @@
+# app.py
 import streamlit as st
 import pandas as pd
-from helper import prediksi_kategori   # ← GANTI DI SINI
-import numpy as np
-from pathlib import Path
-import re
-import json
-
-try:
-    from streamlit_lottie import st_lottie
-    _HAS_LOTTIE = True
-except:
-    _HAS_LOTTIE = False
+from helper import prediksi_kategori
+import matplotlib.pyplot as plt
 
 # =========================
-# PAGE CONFIG
+# Setup halaman & icon
 # =========================
 st.set_page_config(
-    page_title="Aplikasi Klasifikasi Kategori Laporan",
-    page_icon="🌳",
-    layout="wide",
-    initial_sidebar_state="expanded",
+    page_title="Prediksi Kategori Laporan Kehutanan",
+    page_icon="🌲",
+    layout="wide"
 )
 
 # =========================
-# WARNA
+# Custom CSS untuk cream/coklat aesthetic
 # =========================
-BG1 = "#FCE7E9"
-BG2 = "#E46470"
-PRIMARY = "#E46470"
-CARD_BG = "#FFFFFF"
-TEXT = "#5A1A1F"
-
-# =========================
-# CSS GLOBAL
-# =========================
-st.markdown(f"""
+st.markdown("""
 <style>
-html, body, .stApp {{
-    padding: 0;
-    margin: 0;
-}}
-header {{
-    visibility: hidden;
-    height: 0px;
-}}
-.stApp {{
-    background: linear-gradient(135deg, {BG1}, {BG2});
-}}
-[data-testid="stSidebar"] > div:first-child {{
-    background-color: {PRIMARY};
+body {
+    background: linear-gradient(135deg, #fdf6e3, #f5e0c3);
+}
+.card {
+    background-color: #fff8f0;
+    padding: 20px;
+    border-radius: 15px;
+    box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+    margin-bottom: 25px;
+}
+.stButton>button {
+    background-color: #a67853;
     color: white;
-}}
-[data-testid="stSidebar"] * {{
-    color: white !important;
-    font-weight: 600 !important;
-    font-size: 16px !important;
-}}
-.card {{
-    background: {CARD_BG};
-    border-radius: 14px;
-    padding: 22px;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.08);
-}}
-h1 {{
-    color: {PRIMARY} !important;
-    font-size: 28px !important;
-    font-weight: 700 !important;
-    margin-bottom: 4px !important;
-}}
-h2 {{
-    color: {PRIMARY} !important;
-    font-size: 24px !important;
-}}
-.subtitle {{
-    color: {TEXT};
-    margin-top: -6px;
-    font-size: 15px;
-}}
-.stDownloadButton button {{
-    background: {PRIMARY};
-    color: white;
-    font-weight: 600;
-    border-radius: 12px;
-    padding: 6px 14px;
-}}
-.stDownloadButton button:hover {{
-    background: #c8505a;
-}}
+    font-weight: bold;
+    padding: 10px 20px;
+    border-radius: 8px;
+    transition: 0.3s;
+}
+.stButton>button:hover {
+    background-color: #8b5e3c;
+}
+.dataframe tbody tr:hover {
+    background-color: #f0e6da;
+}
 </style>
 """, unsafe_allow_html=True)
 
 # =========================
-# LOTTIE HERO
+# Header
 # =========================
-def load_lottie():
-    path = Path("animation.json")
-    if _HAS_LOTTIE and path.exists():
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except:
+st.markdown("""
+<div style="text-align: center; padding: 25px;">
+<h1 style="color: #8b5e3c;">🌲 Prediksi Kategori Laporan Kehutanan</h1>
+<p style="color: #5c4033; font-size: 16px;">Masukkan subjek laporan atau upload file untuk mendapatkan kategori otomatis</p>
+</div>
+""", unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
+
+# =========================
+# Fungsi baca file aman
+# =========================
+def read_file(uploaded_file):
+    try:
+        if uploaded_file.name.endswith(".csv"):
+            try:
+                df = pd.read_csv(uploaded_file)
+            except:
+                try:
+                    df = pd.read_csv(uploaded_file, sep=';', encoding='utf-8', engine='python')
+                except:
+                    df = pd.read_csv(uploaded_file, sep=';', encoding='utf-8-sig', engine='python')
+        else:
+            try:
+                df = pd.read_excel(uploaded_file, sheet_name=0)
+            except:
+                st.error("Gagal membaca Excel. Pastikan file tidak corrupt dan sheet ada isinya.")
+                return None
+
+        if df.empty or len(df.columns) == 0:
+            st.error("File kosong atau tidak memiliki kolom. Pastikan file benar.")
             return None
-    return None
 
-lottie_data = load_lottie()
-
-# =========================
-# SIDEBAR NAV
-# =========================
-st.sidebar.markdown("## Menu")
-choice = st.sidebar.radio("", ["Home", "Input Data", "Proses", "Hasil"])
-
-# =========================
-# HALAMAN HOME
-# =========================
-if choice == "Home":
-    col1, col2 = st.columns([2,1], gap="large")
-    with col1:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.markdown('<h1>🌳 Aplikasi Klasifikasi Kategori Laporan</h1>', unsafe_allow_html=True)
-        st.subheader("Prototipe menggunakan KNN + TF-IDF untuk mengklasifikasikan kategori laporan masyarakat.")
-        st.markdown("</div>", unsafe_allow_html=True)
-        
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.subheader("Selamat Datang 👋")
-        st.write("""
-        Aplikasi ini digunakan untuk melakukan preprocessing teks
-        dan mengklasifikasikan kategori laporan secara otomatis
-        menggunakan model Machine Learning (TF-IDF + KNN).
-        """)
-        st.markdown("</div>", unsafe_allow_html=True)
-    with col2:
-        st.markdown("<div class='card' style='text-align:center;'>", unsafe_allow_html=True)
-        if lottie_data:
-            st_lottie(lottie_data, height=200, key="hero")
+        cols_lower = [c.lower().strip() for c in df.columns]
+        if 'subjek laporan' in cols_lower:
+            col_index = cols_lower.index('subjek laporan')
+            df = df.iloc[:, [col_index]]
+            df.columns = ['Subjek Laporan']
         else:
-            st.markdown(f"<h2 style='color:{PRIMARY};'>Ready ✔</h2>", unsafe_allow_html=True)
-            st.markdown("<div style='color:#8a4a52;'>Animasi tidak ditemukan.</div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.error("File harus memiliki kolom 'Subjek Laporan'.")
+            return None
+
+        df.dropna(subset=['Subjek Laporan'], inplace=True)
+        df['Subjek Laporan'] = df['Subjek Laporan'].astype(str)
+        if df.empty:
+            st.error("Tidak ada data valid untuk diprediksi.")
+            return None
+
+        return df
+    except Exception as e:
+        st.error(f"Terjadi kesalahan saat membaca file: {e}")
+        return None
 
 # =========================
-# INPUT DATA
+# Layout dua kolom
 # =========================
-elif choice == "Input Data":
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.header("📥 Input Data Laporan")
-    st.write("Unggah file CSV atau masukkan teks manual.")
+col1, col2 = st.columns([1, 1])
 
-    uploaded = st.file_uploader("Upload CSV", type=["csv"])
-    if uploaded:
-        try:
-            try:
-                df = pd.read_csv(uploaded, on_bad_lines='skip')
-            except Exception:
-                uploaded.seek(0)
-                df = pd.read_csv(uploaded, sep=';', on_bad_lines='skip')
-            st.session_state["input_df"] = df
-            st.success("File berhasil diunggah!")
-            st.dataframe(df.head())
-        except Exception as e:
-            st.error(f"Error membaca file: {e}")
-
-    st.markdown("---")
-    manual = st.text_area("Input manual (satu baris = satu laporan)", height=150)
-    if st.button("Simpan Manual"):
-        if manual.strip() == "":
-            st.warning("Masukkan minimal satu baris teks.")
+# ======= Kolom 1: Prediksi Satu Laporan =======
+with col1:
+    st.subheader("Prediksi Satu Laporan")
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    teks_input = st.text_area("Masukkan Subjek Laporan:", height=180)
+    if st.button("Prediksi Kategori Laporan", key="btn_satu"):
+        if teks_input.strip() == "":
+            st.warning("Tolong masukkan teks laporan terlebih dahulu!")
         else:
-            lines = [l for l in manual.splitlines() if l.strip()]
-            dfm = pd.DataFrame({"Subjek Laporan": lines})
-            st.session_state["input_df"] = dfm
-            st.success("Data manual berhasil disimpan!")
-            st.dataframe(dfm)
-    st.markdown("</div>", unsafe_allow_html=True)
+            kategori = prediksi_kategori(teks_input)
+            st.success(f"🌲 Kategori yang diprediksi: **{kategori}**")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ======= Kolom 2: Prediksi Banyak Laporan (Interaktif) =======
+with col2:
+    st.subheader("Prediksi Banyak Laporan (Excel / CSV)")
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    uploaded_file = st.file_uploader("Upload file Excel/CSV", type=["xlsx", "csv"], key="uploader")
+
+    if uploaded_file is not None:
+        df = read_file(uploaded_file)
+        if df is not None:
+            st.success(f"File berhasil dibersihkan! Jumlah baris valid: {len(df)}")
+            
+            # Prediksi kategori
+            df['Kategori Prediksi'] = df['Subjek Laporan'].apply(prediksi_kategori)
+
+            # Pilihan filter kategori dengan tooltip penjelas
+            kategori_unique = df['Kategori Prediksi'].unique().tolist()
+            selected_kategori = st.multiselect(
+                "Filter kategori untuk ditampilkan:",
+                options=kategori_unique,
+                default=kategori_unique
+            )
+            st.caption("💡 Tips: Pilih kategori untuk menampilkan hanya kategori tersebut. Jika tidak memilih apapun, semua kategori akan ditampilkan.")
+
+            df_filtered = df[df['Kategori Prediksi'].isin(selected_kategori)]
+
+            # Highlight kategori
+            color_map = {
+                "Illegal Mining": "#f8d7da",
+                "Perambahan Lahan": "#fff3cd",
+                "Konflik Tenurial": "#d1ecf1",
+                "Perambahan Hutan": "#f5e0c3"
+            }
+            def highlight_category(row):
+                return [f"background-color: {color_map.get(row['Kategori Prediksi'], '')}"]*len(row)
+
+            st.markdown("### Tabel Hasil Prediksi")
+            st.dataframe(df_filtered.style.apply(highlight_category, axis=1), use_container_width=True)
+
+            # ====== Visualisasi summary ======
+            st.markdown("### Ringkasan Kategori Laporan")
+            kategori_count = df_filtered['Kategori Prediksi'].value_counts()
+            
+            # Bar chart
+            st.bar_chart(kategori_count)
+
+            # Pie chart
+            fig, ax = plt.subplots()
+            ax.pie(kategori_count, labels=kategori_count.index, autopct='%1.1f%%', startangle=90,
+                   colors=[color_map.get(k,'#ccc') for k in kategori_count.index])
+            ax.axis('equal')
+            st.pyplot(fig)
+
+            # Tombol download CSV
+            csv = df_filtered.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="Unduh Hasil Prediksi Filtered CSV",
+                data=csv,
+                file_name='hasil_prediksi_filtered.csv',
+                mime='text/csv'
+            )
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
-# PROSES
+# Footer
 # =========================
-elif choice == "Proses":
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.title("⚙️ Proses Data Laporan")
-    st.subheader("Mulai Proses Klasifikasi")
-
-    if st.button("🚀 Proses Data"):
-        if "input_df" not in st.session_state:
-            st.warning("⚠ Belum ada data. Silakan upload data di menu Input Data.")
-        else:
-            try:
-                df_proc = st.session_state["input_df"].copy()
-
-                if "Subjek Laporan" not in df_proc.columns:
-                    first_col = df_proc.columns[0]
-                    df_proc = df_proc.rename(columns={first_col: "Subjek Laporan"})
-
-                df_proc["Subjek Laporan"] = df_proc["Subjek Laporan"].astype(str)
-
-                # 🔥 GANTI: sekarang prediksi kategori
-                df_proc["Prediksi Kategori"] = df_proc["Subjek Laporan"].apply(prediksi_kategori)
-
-                st.session_state["prediksi_df"] = df_proc
-                st.success("✔ Data berhasil diproses dan diklasifikasikan!")
-            except Exception as e:
-                st.error(f"❌ Terjadi kesalahan: {e}")
-
-    if "input_df" in st.session_state:
-        st.markdown("---")
-        st.subheader("Preview Data Input")
-        st.dataframe(st.session_state["input_df"], use_container_width=True)
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-# =========================
-# HASIL
-# =========================
-elif choice == "Hasil":
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.header("📊 Hasil Prediksi Kategori")
-    st.markdown("<div class='subtitle'>Berikut adalah hasil klasifikasi kategori laporan.</div>", unsafe_allow_html=True)
-
-    if "prediksi_df" not in st.session_state:
-        st.warning("⚠ Belum ada hasil. Silakan lakukan *Proses* terlebih dahulu.")
-        st.markdown("</div>", unsafe_allow_html=True)
-    else:
-        df = st.session_state["prediksi_df"]
-        st.success("✔ Prediksi Berhasil Diproses")
-        st.dataframe(df, use_container_width=True)
-
-        csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="📥 Download Hasil Prediksi",
-            data=csv,
-            file_name="hasil_prediksi_kategori.csv",
-            mime="text/csv",
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+st.markdown("<hr><p style='text-align: center; color: #5c4033;'>© 2025 Prediksi Kategori Laporan Kehutanan</p>", unsafe_allow_html=True)
